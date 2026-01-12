@@ -157,7 +157,12 @@
               const currentEp = a.nextAiringEpisode?.episode ? a.nextAiringEpisode.episode - 1 : 
                                a.airingSchedule?.nodes[0]?.episode || 1;
               
-              const indonesianDate = airingTime ? new Date(airingTime * 1000) : null;
+              // Convert to Indonesian time and add 1 day
+              let indonesianDate = null;
+              if (airingTime) {
+                indonesianDate = new Date(airingTime * 1000);
+                indonesianDate.setDate(indonesianDate.getDate() + 1); // Add 1 day
+              }
               
               return {
                 id: a.id,
