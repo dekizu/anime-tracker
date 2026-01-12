@@ -8,7 +8,6 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
   <div id="root"></div>
@@ -27,6 +26,7 @@
       const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
       const [selectedSeason, setSelectedSeason] = useState('ALL');
       const [selectedYear, setSelectedYear] = useState(2026);
+      const [error, setError] = useState(null);
 
       const days = ['All', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
       const seasons = [
@@ -72,11 +72,13 @@
 
       const fetchSeasonalAnime = async () => {
         setLoading(true);
+        setError(null);
+        
         try {
-          // If showing bookmarked only, fetch all bookmarked anime
+          console.log('Fetching anime...', { selectedSeason, selectedYear, showBookmarkedOnly });
+          // If showing bookmarked only
           if (showBookmarkedOnly) {
             if (bookmarkedAnime.size === 0) {
-              // No bookmarks, show empty
               setAnime([]);
               setLoading(false);
               return;
@@ -123,8 +125,16 @@
               body: JSON.stringify({ query }),
             });
 
+            if (!response.ok) {
+              throw new Error('Failed to fetch bookmarked anime');
+            }
+
             const data = await response.json();
             
+            if (data.errors) {
+              throw new Error(data.errors[0].message);
+            }
+
             const processedAnime = data.data.Page.media.map(a => {
               const airingTime = a.nextAiringEpisode?.airingAt || a.airingSchedule?.nodes[0]?.airingAt;
               const currentEp = a.nextAiringEpisode?.episode ? a.nextAiringEpisode.episode - 1 : 
@@ -155,7 +165,6 @@
           }
 
           // Regular season fetch
-          // Build season filter - if ALL is selected, don't filter by season
           const seasonFilter = selectedSeason === 'ALL' ? '' : `, season: ${selectedSeason}`;
           
           const query = `
@@ -194,16 +203,33 @@
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'Accept': 'application/json',
             },
-            body: JSON.stringify({ query }),
+            body: JSON.stringify({ 
+              query: query.trim()
+            }),
           });
 
+          if (!response.ok) {
+            throw new Error('Failed to fetch anime');
+          }
+
           const data = await response.json();
+          
+          if (data.errors) {
+            throw new Error(data.errors[0].message);
+          }
+
+          if (!data.data || !data.data.Page || !data.data.Page.media) {
+            throw new Error('Invalid response from API');
+          }
           
           const processedAnime = data.data.Page.media.map(a => {
             const airingTime = a.nextAiringEpisode?.airingAt || a.airingSchedule?.nodes[0]?.airingAt;
             const currentEp = a.nextAiringEpisode?.episode ? a.nextAiringEpisode.episode - 1 : 
                              a.airingSchedule?.nodes[0]?.episode || 1;
+            
+            const indonesianDate = airingTime ? new Date(airingTime * 1000) : null;
             
             return {
               id: a.id,
@@ -212,8 +238,8 @@
               totalEpisodes: a.episodes,
               nextEpisode: a.nextAiringEpisode?.episode,
               airingAt: airingTime,
-              day: airingTime ? new Date(airingTime * 1000).toLocaleDateString('en-US', { weekday: 'long' }) : 'TBA',
-              time: airingTime ? new Date(airingTime * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'TBA',
+              day: indonesianDate ? indonesianDate.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'Asia/Jakarta' }) : 'TBA',
+              time: indonesianDate ? indonesianDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' }).replace(/^24/, '00') : 'TBA',
               cover: a.coverImage.large,
               color: a.coverImage.color || '#3B82F6',
               score: a.averageScore,
@@ -225,6 +251,7 @@
           setAnime(processedAnime);
         } catch (error) {
           console.error('Error fetching anime:', error);
+          setError(error.message);
         } finally {
           setLoading(false);
         }
@@ -269,7 +296,6 @@
       const filteredAnime = anime.filter(a => {
         const matchesDay = selectedDay === 'All' || a.day === selectedDay;
         const matchesSearch = a.title.toLowerCase().includes(searchTerm.toLowerCase());
-        // When in bookmarked mode, we already fetched only bookmarked anime
         return matchesDay && matchesSearch;
       });
 
@@ -284,6 +310,23 @@
                 </svg>
               </div>
               <p className="text-white text-lg">Loading seasonal anime...</p>
+            </div>
+          </div>
+        );
+      }
+
+      if (error) {
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-black via-blue-900 to-black flex items-center justify-center p-4">
+            <div className="text-center bg-red-500/20 border border-red-500 rounded-lg p-6 max-w-md">
+              <p className="text-red-400 text-lg mb-4">Error loading anime</p>
+              <p className="text-red-300 text-sm mb-4">{error}</p>
+              <button 
+                onClick={() => fetchSeasonalAnime()} 
+                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+              >
+                Try Again
+              </button>
             </div>
           </div>
         );
@@ -406,6 +449,7 @@
               {filteredAnime.length === 0 ? (
                 <div className="text-center py-12 text-slate-400">
                   <p>No anime found</p>
+                  {showBookmarkedOnly && <p className="text-sm mt-2">Try bookmarking some anime first!</p>}
                 </div>
               ) : (
                 filteredAnime.map(a => {
