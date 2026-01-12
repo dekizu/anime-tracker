@@ -39,9 +39,12 @@
       const years = [2024, 2025, 2026, 2027];
 
       useEffect(() => {
-        fetchSeasonalAnime();
         loadUserData();
-      }, [selectedSeason, selectedYear]);
+      }, []);
+
+      useEffect(() => {
+        fetchSeasonalAnime();
+      }, [selectedSeason, selectedYear, showBookmarkedOnly]);
 
       const loadUserData = () => {
         try {
@@ -70,6 +73,81 @@
       const fetchSeasonalAnime = async () => {
         setLoading(true);
         try {
+          // If showing bookmarked only, fetch all bookmarked anime
+          if (showBookmarkedOnly && bookmarkedAnime.size > 0) {
+            const bookmarkedIds = Array.from(bookmarkedAnime);
+            const query = `
+              query {
+                Page(page: 1, perPage: 100) {
+                  media(id_in: [${bookmarkedIds.join(',')}], type: ANIME) {
+                    id
+                    title {
+                      english
+                      romaji
+                    }
+                    episodes
+                    nextAiringEpisode {
+                      episode
+                      airingAt
+                    }
+                    coverImage {
+                      large
+                      color
+                    }
+                    averageScore
+                    description
+                    genres
+                    airingSchedule(notYetAired: false, perPage: 1) {
+                      nodes {
+                        airingAt
+                        episode
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            const response = await fetch('https://graphql.anilist.co', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ query }),
+            });
+
+            const data = await response.json();
+            
+            const processedAnime = data.data.Page.media.map(a => {
+              const airingTime = a.nextAiringEpisode?.airingAt || a.airingSchedule?.nodes[0]?.airingAt;
+              const currentEp = a.nextAiringEpisode?.episode ? a.nextAiringEpisode.episode - 1 : 
+                               a.airingSchedule?.nodes[0]?.episode || 1;
+              
+              const indonesianDate = airingTime ? new Date(airingTime * 1000) : null;
+              
+              return {
+                id: a.id,
+                title: a.title.english || a.title.romaji,
+                episode: currentEp,
+                totalEpisodes: a.episodes,
+                nextEpisode: a.nextAiringEpisode?.episode,
+                airingAt: airingTime,
+                day: indonesianDate ? indonesianDate.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'Asia/Jakarta' }) : 'TBA',
+                time: indonesianDate ? indonesianDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' }).replace(/^24/, '00') : 'TBA',
+                cover: a.coverImage.large,
+                color: a.coverImage.color || '#3B82F6',
+                score: a.averageScore,
+                description: a.description?.replace(/<[^>]*>/g, '').slice(0, 150) + '...' || 'No description available',
+                genres: a.genres.slice(0, 3),
+              };
+            });
+
+            setAnime(processedAnime);
+            setLoading(false);
+            return;
+          }
+
+          // Regular season fetch
           // Build season filter - if ALL is selected, don't filter by season
           const seasonFilter = selectedSeason === 'ALL' ? '' : `, season: ${selectedSeason}`;
           
@@ -184,8 +262,8 @@
       const filteredAnime = anime.filter(a => {
         const matchesDay = selectedDay === 'All' || a.day === selectedDay;
         const matchesSearch = a.title.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesBookmark = !showBookmarkedOnly || bookmarkedAnime.has(a.id);
-        return matchesDay && matchesSearch && matchesBookmark;
+        // When in bookmarked mode, we already fetched only bookmarked anime
+        return matchesDay && matchesSearch;
       });
 
       if (loading) {
