@@ -9,13 +9,20 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Get the query from request body
+    const { query } = req.body;
+    
+    if (!query) {
+      return res.status(400).json({ error: 'No query provided' });
+    }
+
     const response = await fetch('https://graphql.anilist.co', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify({ query }),
     });
 
     const data = await response.json();
