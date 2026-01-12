@@ -97,7 +97,10 @@
             const bookmarkedIds = Array.from(bookmarkedAnime);
             const query = `
               query {
-                Page(page: 1, perPage: 100) {
+                Page(page: ${page}, perPage: 50) {
+                  pageInfo {
+                    hasNextPage
+                  }
                   media(id_in: [${bookmarkedIds.join(',')}], type: ANIME) {
                     id
                     title {
@@ -127,7 +130,7 @@
               }
             `;
 
-            const response = await fetch('https://corsproxy.io/?' + encodeURIComponent('https://graphql.anilist.co'), {
+            const response = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://graphql.anilist.co'), {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -146,6 +149,8 @@
             if (data.errors) {
               throw new Error(data.errors[0].message);
             }
+
+            setHasNextPage(data.data.Page.pageInfo.hasNextPage);
 
             const processedAnime = data.data.Page.media.map(a => {
               const airingTime = a.nextAiringEpisode?.airingAt || a.airingSchedule?.nodes[0]?.airingAt;
@@ -171,8 +176,13 @@
               };
             });
 
-            setAnime(processedAnime);
+            if (append) {
+              setAnime(prev => [...prev, ...processedAnime]);
+            } else {
+              setAnime(processedAnime);
+            }
             setLoading(false);
+            setLoadingMore(false);
             return;
           }
 
@@ -181,7 +191,10 @@
           
           const query = `
             query {
-              Page(page: 1, perPage: 100) {
+              Page(page: ${page}, perPage: 50) {
+                pageInfo {
+                  hasNextPage
+                }
                 media(seasonYear: ${selectedYear}${seasonFilter}, type: ANIME, sort: POPULARITY_DESC) {
                   id
                   title {
@@ -211,7 +224,7 @@
             }
           `;
 
-          const response = await fetch('https://corsproxy.io/?' + encodeURIComponent('https://graphql.anilist.co'), {
+          const response = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://graphql.anilist.co'), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -234,6 +247,8 @@
           if (!data.data || !data.data.Page || !data.data.Page.media) {
             throw new Error('Invalid response from API');
           }
+
+          setHasNextPage(data.data.Page.pageInfo.hasNextPage);
           
           const processedAnime = data.data.Page.media.map(a => {
             const airingTime = a.nextAiringEpisode?.airingAt || a.airingSchedule?.nodes[0]?.airingAt;
@@ -259,13 +274,24 @@
             };
           });
 
-          setAnime(processedAnime);
+          if (append) {
+            setAnime(prev => [...prev, ...processedAnime]);
+          } else {
+            setAnime(processedAnime);
+          }
         } catch (error) {
           console.error('Error fetching anime:', error);
           setError(error.message);
         } finally {
           setLoading(false);
+          setLoadingMore(false);
         }
+      };
+
+      const loadMore = () => {
+        const nextPage = currentPage + 1;
+        setCurrentPage(nextPage);
+        fetchSeasonalAnime(nextPage, true);
       };
 
       const toggleWatched = (animeId, episode) => {
@@ -544,6 +570,29 @@
                 })
               )}
             </div>
+
+            {/* Load More Button */}
+            {hasNextPage && !showBookmarkedOnly && (
+              <div className="text-center mt-6">
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loadingMore ? (
+                    <span className="flex items-center gap-2">
+                      <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Loading...
+                    </span>
+                  ) : (
+                    `Load More (${anime.length} loaded)`
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       );
