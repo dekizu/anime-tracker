@@ -27,6 +27,9 @@
       const [selectedSeason, setSelectedSeason] = useState('ALL');
       const [selectedYear, setSelectedYear] = useState(2026);
       const [error, setError] = useState(null);
+      const [currentPage, setCurrentPage] = useState(1);
+      const [hasNextPage, setHasNextPage] = useState(false);
+      const [loadingMore, setLoadingMore] = useState(false);
 
       const days = ['All', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
       const seasons = [
@@ -43,7 +46,9 @@
       }, []);
 
       useEffect(() => {
-        fetchSeasonalAnime();
+        setCurrentPage(1);
+        setAnime([]);
+        fetchSeasonalAnime(1);
       }, [selectedSeason, selectedYear, showBookmarkedOnly]);
 
       const loadUserData = () => {
@@ -70,12 +75,16 @@
         }
       };
 
-      const fetchSeasonalAnime = async () => {
-        setLoading(true);
+      const fetchSeasonalAnime = async (page = 1, append = false) => {
+        if (page === 1) {
+          setLoading(true);
+        } else {
+          setLoadingMore(true);
+        }
         setError(null);
         
         try {
-          console.log('Fetching anime via API proxy...', { selectedSeason, selectedYear, showBookmarkedOnly });
+          console.log('Fetching anime via API proxy...', { selectedSeason, selectedYear, showBookmarkedOnly, page });
           
           // If showing bookmarked only
           if (showBookmarkedOnly) {
