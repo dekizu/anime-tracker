@@ -74,7 +74,14 @@
         setLoading(true);
         try {
           // If showing bookmarked only, fetch all bookmarked anime
-          if (showBookmarkedOnly && bookmarkedAnime.size > 0) {
+          if (showBookmarkedOnly) {
+            if (bookmarkedAnime.size === 0) {
+              // No bookmarks, show empty
+              setAnime([]);
+              setLoading(false);
+              return;
+            }
+
             const bookmarkedIds = Array.from(bookmarkedAnime);
             const query = `
               query {
